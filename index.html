@@ -1,1 +1,229 @@
-<h1>Test</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Visualisation of Yr weather data</title>
+    <style>
+
+        body {
+            font: 12px sans-serif;
+        }
+
+        #header {
+            position: relative;
+            top: 0px;
+            width: 100%;
+            background-color: #eee;
+        }
+
+        #footer {
+            background-color: #eee;
+            position: relative;
+            width: 100%;
+        }
+
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #999;
+            shape-rendering: crispEdges;
+        }
+
+        .x.axis path {
+            display: none;
+        }
+
+        .axis .title,
+        .x.axis text {
+            font-size: 16px;
+        }
+
+        .line {
+            fill: none;
+            stroke-width: 1.5px;
+            stroke: dodgerblue;
+        }
+
+        .outlierLine {
+            fill: none;
+            stroke-width: 1.0px;
+            stroke: black;
+        }
+
+        .lowerBoundLine {
+            fill: none;
+            stroke-width: 1.0px;
+            stroke: dodgerblue;
+            stroke-dasharray: 3;
+        }
+
+        .upperBoundLine {
+            fill: none;
+            stroke-width: 1.0px;
+            stroke: dodgerblue;
+            stroke-dasharray: 5;
+        }
+
+        .mean {
+            fill: none;
+            stroke: black;
+            stroke-width: 1.5px;
+        }
+
+        .meanExtra {
+            fill: none;
+            stroke: red;
+            stroke-width: 2.0px;
+            stroke-dasharray: 3;
+            stroke-opacity: 0.5;
+        }
+
+        .hoverbox {
+            fill: rgba(100, 100, 200, 0.3);
+            stroke: dodgerblue;
+            stroke-width: 1.5;
+        }
+
+        .btn {
+            padding: 5px;
+            margin-right: 10px;
+        }
+
+        .panel {
+            display: inline;
+        }
+
+        .allYearsRect {
+            fill: dodgerblue;
+            stroke-width: 1.5px;
+            stroke: black;
+        }
+    </style>
+</head>
+<body>
+<script src="https://d3js.org/d3.v4.js"></script>
+<script src="binning.js"></script>
+<script src="setup.js"></script>
+<script src="lineChartYear.js"></script>
+<script src="lineChartMonth.js"></script>
+<script src="lineChartDay.js"></script>
+<script src="allYearsPlot.js"></script>
+<script src="calendarViewMonth.js"></script>
+
+<div id="header">
+    <div id="controlpanel"></div>
+</div>
+<script type="text/javascript">
+    let data;
+    let resolution = 50;
+    let currentYear = 2000;
+    let displayingAllYearsPlot = false;
+    d3.csv("weatherDataArranged.csv", function (error, csvData) {
+        if (error) {
+            console.log(error);
+        } else {
+            // Setup
+            data = parseData(csvData);
+            let y = makeYearBins(data);
+            displayYearPlot(y);
+            cyclePlotHelp();
+        }
+
+    });
+
+    function updatePlot(data) {
+        if (document.getElementsByClassName("radio").length) {
+            let rs = document.getElementsByClassName("radio");
+            [].forEach.call(rs, r => r.disabled = true);
+        }
+        displayingAllYearsPlot = false;
+        setResolution();
+        const hasPlot = document.getElementsByClassName("yearly").length;
+        let m = makeMonthBins(data);
+        let y = makeYearBins(data);
+
+        cyclePlotHelp();
+        if (hasPlot) {
+            updateMonthPlot(m, currentYear);
+            d3.selectAll(".calendarView").remove();
+            displayCalendarView(m, currentYear);
+        } else {
+            d3.selectAll("svg").remove();
+            displayingDaily = false;
+            displayYearPlot(y);
+            displayMonthPlot(m, currentYear);
+            displayCalendarView(m, currentYear);
+        }
+    }
+
+    function plotAllYears(data) {
+        if (document.getElementsByClassName("radio").length) {
+            let rs = document.getElementsByClassName("radio");
+            [].forEach.call(rs, r => r.disabled = false);
+        }
+        displayingAllYearsPlot = true;
+        if (document.getElementById("radioMean").checked) {
+            allYearsUsingMean = true;
+        } else {
+            allYearsUsingMean = false;
+        }
+        setResolution();
+        let m = makeYearBins(data);
+        allYearPlotHelp();
+        m.forEach(d => { d.data = makeMonthBins(d.data)});
+        d3.selectAll("svg").remove();
+        displayAllYearsPlot(m);
+    }
+
+    setTimeout(function () {
+        function setupPanel(data) {
+            let minYear = d3.min(data, d => d.Date.getFullYear());
+            let maxYear = d3.max(data, d => d.Date.getFullYear());
+            let panel = document.getElementById("controlpanel");
+            panel.innerHTML += '<button class="btn" onclick="updatePlot(data)">Yearly Plots</button>';
+            panel.innerHTML += '<span style="border-left:1px solid #000; height:16px; margin: 10px;"></span>';
+            panel.innerHTML += '<button class="btn" onclick="plotAllYears(data, ' + minYear + ', ' + maxYear + ')">Box Plot for All Years</button>';
+            panel.innerHTML += '<input class="radio" id="radioMean" name="allYearsAverage" type="radio" checked disabled="true" />Mean &nbsp;&nbsp;';
+            panel.innerHTML += '<input class="radio" id="radioMedian" name="allYearsAverage" type="radio" disabled="true" />Mode';
+            panel.innerHTML += '<span style="border-left:1px solid #000; height:16px; margin: 10px; "></span>';
+            panel.innerHTML += ' Resolution: ';
+            panel.innerHTML += '<input id="inpResolution" type="range" min="0" max="100" value="50" />';
+
+            document.getElementById("inpResolution").addEventListener("mouseup", function() {
+                if (displayingAllYearsPlot) {
+                    plotAllYears(data);
+                } else {
+                    updatePlot(data);
+                }
+            });
+        }
+        setupPanel(data);
+    }, 1000);
+
+    function cyclePlotHelp() {
+        let helpText = document.getElementById("footer");
+        helpText.innerHTML = "<p>The plot displays air pressure measured at the Flesland weather station in Bergen.</p>";
+        helpText.innerHTML += "<p>Click the upper or lower section of a year to select it and get a month by month overview for that year.</p>";
+        helpText.innerHTML += "<p>Each month is displayed in a line chart with a blue line representing daily changes and a black line representing the monthly mean, and in a calendar view, where low air pressure is denoted by red blocks and high air pressure is denoted by blue blocks.</p>";
+        helpText.innerHTML += "<p>Click a month in the line chart to get a more detailed view of each day, with the minimum and maximum values for the day represented by stipled lines.</p>";
+        helpText.innerHTML += "<p>Change year by clicking on another. For another resolution, change the slider at the top.</p>";
+    }
+
+    function allYearPlotHelp() {
+        let helpText = document.getElementById("footer");
+        helpText.innerHTML = "<p>The plot displays the air pressure measured at the Flesland weather station in Bergen, for every month across all years in the dataset.</p>"
+        helpText.innerHTML += "<p>Each box contains the 25%, 50% and 75% quartile of all years as black lines, and the minimum and maximum for every month, as the upper and lower lines. The minimum and maximum is also denoted by the year when it occured.</p>"
+        helpText.innerHTML += "<p>The plot also displays either the median or the mode number for each month. The mode is found from each value, rounded down.</p>";
+        helpText.innerHTML += "<p>To swap between mean and mode, use the radio buttons at the top panel, followed by a new click of the All Years button or a resolution update.</p>"
+    }
+
+    function setResolution() {
+        let setResolution = document.getElementById("inpResolution");
+        if (setResolution && setResolution.value <= 100 && setResolution.value >= 0) {
+            resolution = 3 * (100 - setResolution.value);
+        }
+    }
+</script>
+<div id="footer"></div>
+</body>
+</html>
